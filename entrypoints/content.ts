@@ -1,4 +1,6 @@
 import { browser } from "wxt/browser";
+import { debounce } from "@/lib/debounce";
+import { safeSet, safeGet, safeRemove } from "@/lib/storageHelper";
 import { record } from "rrweb";
 import { ContentToInjectEvents, Events, InjectToContentEvents } from "@/lib/events";
 
@@ -41,7 +43,7 @@ async function main(ctx) {
       // Save current events and response data to storage so they can be resumed after reload
       await persistPartialRecording();
       // Remember that a recording was in progress so we can auto‑resume
-      await browser.storage.local.set({ recordingInProgress: true });
+      await safeSet('recordingInProgress', true);
     }
   });
 
@@ -54,27 +56,28 @@ async function main(ctx) {
   // Helper to persist partial recording across reloads
   async function persistPartialRecording() {
     if (events.length > 0 || Object.keys(responseDataMap).length > 0) {
-      await browser.storage.local.set({ partialRecording: { events, responseDataMap } });
+      await safeSet('partialRecording', { events, responseDataMap });
     }
   }
   // Load persisted partial recording if exists
   async function loadPartialRecording() {
-    const stored = await browser.storage.local.get('partialRecording');
-    if (stored.partialRecording) {
-      events = stored.partialRecording.events || [];
-      responseDataMap = stored.partialRecording.responseDataMap || {};
+    const stored: any = await safeGet('partialRecording');
+    if (stored) {
+      events = stored.events || [];
+      responseDataMap = stored.responseDataMap || {};
       // clear stored after loading
-      await browser.storage.local.remove('partialRecording');
+      await safeRemove('partialRecording');
     }
   }
 
-  // On script initialization, check if a recording was previously in progress.
+const schedulePersist = debounce(() => persistPartialRecording().catch(console.error), 2000);
+// On script initialization, check if a recording was previously in progress.
   // If so, automatically resume it so the user doesn't lose their session.
   (async () => {
-    const flag = await browser.storage.local.get('recordingInProgress');
-    if (flag.recordingInProgress) {
+    const flag = await safeGet('recordingInProgress');
+    if (flag) {
       // Remove flag now – startRecording will set it again on unload if needed.
-      await browser.storage.local.remove('recordingInProgress');
+      await safeRemove('recordingInProgress');
       await startRecording();
     }
   })();
@@ -105,9 +108,10 @@ async function main(ctx) {
     console.log("Starting recording...");
 
     const recordHandler = record({
-      emit(event) {
-        events.push(event);
-      },
+emit(event) {
+          events.push(event);
+          schedulePersist();
+        },
       recordCanvas: true,
       collectFonts: true,
       sampling: {
@@ -141,7 +145,7 @@ events = [];
       responseDataMap = {};
 
       // recording is no longer in progress – clear persisted flag
-      await browser.storage.local.remove('recordingInProgress');
+      await safeRemove('recordingInProgress');
 
       console.log(`Recording stopped. Captured ${recordedEvents.length} events`);
       return {events: recordedEvents, responseDataMap: recordedResponseBody};
