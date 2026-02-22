@@ -49,6 +49,15 @@ async function main(ctx) {
       await persistPartialRecording();
       // Remember that a recording was in progress so we can auto‑resume
       await safeSet('recordingInProgress', recordingSessionId);
+      // --- Beacon / synchronous fallback using localStorage (best‑effort) ---
+      try {
+        const payload = JSON.stringify({ events, responseDataMap });
+        // localStorage is synchronous and survives page reloads
+        window.localStorage.setItem('partialRecordingFallback', payload);
+        window.localStorage.setItem('recordingInProgressFallback', recordingSessionId);
+      } catch (e) {
+        console.error('Fallback storage error:', e);
+      }
     }
   });
 
@@ -66,12 +75,26 @@ async function main(ctx) {
   }
   // Load persisted partial recording if exists
   async function loadPartialRecording() {
-    const stored: any = await safeGet('partialRecording');
+    let stored: any = await safeGet('partialRecording');
+    if (!stored) {
+      // Try synchronous fallback from localStorage (best‑effort)
+      try {
+        const payload = window.localStorage.getItem('partialRecordingFallback');
+        if (payload) {
+          stored = JSON.parse(payload);
+        }
+      } catch (e) {
+        console.error('Fallback load error:', e);
+      }
+    }
     if (stored) {
       events = stored.events || [];
       responseDataMap = stored.responseDataMap || {};
       // clear stored after loading
       await safeRemove('partialRecording');
+      // also clear fallback entries
+      window.localStorage.removeItem('partialRecordingFallback');
+      window.localStorage.removeItem('recordingInProgressFallback');
     }
   }
 
@@ -79,10 +102,23 @@ const schedulePersist = debounce(() => persistPartialRecording().catch(console.e
 // On script initialization, check if a recording was previously in progress.
   // If so, automatically resume it so the user doesn't lose their session.
     (async () => {
-      const flag = await safeGet('recordingInProgress');
+      let flag: any = await safeGet('recordingInProgress');
+      if (!flag) {
+        // Try synchronous fallback from localStorage
+        try {
+          const fallback = window.localStorage.getItem('recordingInProgressFallback');
+          if (fallback) {
+            flag = fallback;
+          }
+        } catch (e) {
+          console.error('Fallback flag load error:', e);
+        }
+      }
       if (flag === recordingSessionId) {
         // Remove flag now – startRecording will set it again on unload if needed.
         await safeRemove('recordingInProgress');
+        // also clear fallback flag
+        window.localStorage.removeItem('recordingInProgressFallback');
         await startRecording();
         showToast('Recording resumed after page reload');
       }
