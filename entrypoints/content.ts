@@ -5,11 +5,19 @@ import { record } from "rrweb";
 import { ContentToInjectEvents, Events, InjectToContentEvents } from "@/lib/events";
 import { showToast } from "@/lib/toast";
 
-// Unique identifier for this tab's recording session (used to avoid cross‑tab auto‑resume conflicts)
-const recordingSessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
+// Unique identifier for this tab's recording session (persisted across reloads via sessionStorage)
+const SESSION_KEY = 'recordingSessionId';
+let recordingSessionId: string | null = null;
+if (typeof window !== 'undefined' && window.sessionStorage) {
+  recordingSessionId = window.sessionStorage.getItem(SESSION_KEY);
+  if (!recordingSessionId) {
+    recordingSessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
+    window.sessionStorage.setItem(SESSION_KEY, recordingSessionId);
+  }
+}
 
 
-async function main(ctx) {
+async function main(ctx: any) {
   if (ctx.isInvalid) {
     return;
   }
@@ -48,13 +56,13 @@ async function main(ctx) {
       // Save current events and response data to storage so they can be resumed after reload
       await persistPartialRecording();
       // Remember that a recording was in progress so we can auto‑resume
-      await safeSet('recordingInProgress', recordingSessionId);
+      await safeSet('recordingInProgress', recordingSessionId!);
       // --- Beacon / synchronous fallback using localStorage (best‑effort) ---
       try {
         const payload = JSON.stringify({ events, responseDataMap });
         // localStorage is synchronous and survives page reloads
         window.localStorage.setItem('partialRecordingFallback', payload);
-        window.localStorage.setItem('recordingInProgressFallback', recordingSessionId);
+        window.localStorage.setItem('recordingInProgressFallback', recordingSessionId!);
       } catch (e) {
         console.error('Fallback storage error:', e);
       }
@@ -124,15 +132,16 @@ const schedulePersist = debounce(() => persistPartialRecording().catch(console.e
       }
     })();
 
-  browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === Events.startRecording) {
       startRecording();
-      (sendResponse as any)({ success: true, message: "Recording started" });
+      sendResponse({ success: true, message: "Recording started" });
     } else if (message.action === Events.stopRecording) {
-      const recording = stopAndGetRecording();
-      (sendResponse as any)({ success: true, recording });
+      stopAndGetRecording().then(recording => {
+        sendResponse({ success: true, recording });
+      });
     } else if (message.action === Events.getRecordingStatus) {
-      (sendResponse as any)({ isRecording: stopRecording !== null });
+      sendResponse({ isRecording: stopRecording !== null });
     }
 
     return true;
@@ -174,7 +183,7 @@ emit(event) {
   async function stopAndGetRecording() {
     if (!stopRecording) {
       console.log("No recording in progress");
-      return [];
+      return { events: [], responseDataMap: {} };
     }
 
     console.log("Stopping recording...");
@@ -182,15 +191,16 @@ emit(event) {
     stopRecording = null;
     sendMessage(ContentToInjectEvents.stopCdp);
     const recordedEvents = [...events];
-    const recordedResponseBody = {...responseDataMap}
-events = [];
-      responseDataMap = {};
+    const recordedResponseBody = { ...responseDataMap };
+    events = [];
+    responseDataMap = {};
 
-      // recording is no longer in progress – clear persisted flag
-      await safeRemove('recordingInProgress');
+    await safeRemove('recordingInProgress');
+    window.localStorage.removeItem('recordingInProgressFallback');
+    window.localStorage.removeItem('partialRecordingFallback');
 
-      console.log(`Recording stopped. Captured ${recordedEvents.length} events`);
-      return {events: recordedEvents, responseDataMap: recordedResponseBody};
+    console.log(`Recording stopped. Captured ${recordedEvents.length} events`);
+    return { events: recordedEvents, responseDataMap: recordedResponseBody };
   }
 }
 
