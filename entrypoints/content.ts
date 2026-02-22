@@ -35,13 +35,51 @@ async function main(ctx) {
     }
   });
 
+  // Persist recording data when the page is about to unload (e.g., reload or navigation)
+  window.addEventListener('beforeunload', async () => {
+    if (stopRecording) {
+      // Save current events and response data to storage so they can be resumed after reload
+      await persistPartialRecording();
+      // Remember that a recording was in progress so we can auto‑resume
+      await browser.storage.local.set({ recordingInProgress: true });
+    }
+  });
+
   type RecordHandler = () => void;
 
   let stopRecording: RecordHandler | null = null;
+  // Initialize with any persisted events from previous page reloads
   let events: any[] = [];
-  let responseDataMap: Record<string, any> = {}
+  let responseDataMap: Record<string, any> = {};
+  // Helper to persist partial recording across reloads
+  async function persistPartialRecording() {
+    if (events.length > 0 || Object.keys(responseDataMap).length > 0) {
+      await browser.storage.local.set({ partialRecording: { events, responseDataMap } });
+    }
+  }
+  // Load persisted partial recording if exists
+  async function loadPartialRecording() {
+    const stored = await browser.storage.local.get('partialRecording');
+    if (stored.partialRecording) {
+      events = stored.partialRecording.events || [];
+      responseDataMap = stored.partialRecording.responseDataMap || {};
+      // clear stored after loading
+      await browser.storage.local.remove('partialRecording');
+    }
+  }
 
-  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // On script initialization, check if a recording was previously in progress.
+  // If so, automatically resume it so the user doesn't lose their session.
+  (async () => {
+    const flag = await browser.storage.local.get('recordingInProgress');
+    if (flag.recordingInProgress) {
+      // Remove flag now – startRecording will set it again on unload if needed.
+      await browser.storage.local.remove('recordingInProgress');
+      await startRecording();
+    }
+  })();
+
+  browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     if (message.action === Events.startRecording) {
       startRecording();
       (sendResponse as any)({ success: true, message: "Recording started" });
@@ -55,13 +93,15 @@ async function main(ctx) {
     return true;
   });
 
-  function startRecording() {
+  async function startRecording() {
     if (stopRecording) {
       console.log("Recording is already in progress");
       return;
     }
 
-    events = [];
+    // Load any previously saved partial recording data before starting a new one
+    await loadPartialRecording();
+
     console.log("Starting recording...");
 
     const recordHandler = record({
@@ -85,7 +125,7 @@ async function main(ctx) {
     }
   }
 
-  function stopAndGetRecording() {
+  async function stopAndGetRecording() {
     if (!stopRecording) {
       console.log("No recording in progress");
       return [];
@@ -97,11 +137,14 @@ async function main(ctx) {
     sendMessage(ContentToInjectEvents.stopCdp);
     const recordedEvents = [...events];
     const recordedResponseBody = {...responseDataMap}
-    events = [];
-    responseDataMap = {};
+events = [];
+      responseDataMap = {};
 
-    console.log(`Recording stopped. Captured ${recordedEvents.length} events`);
-    return {events: recordedEvents, responseDataMap: recordedResponseBody};
+      // recording is no longer in progress – clear persisted flag
+      await browser.storage.local.remove('recordingInProgress');
+
+      console.log(`Recording stopped. Captured ${recordedEvents.length} events`);
+      return {events: recordedEvents, responseDataMap: recordedResponseBody};
   }
 }
 
