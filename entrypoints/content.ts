@@ -3,6 +3,11 @@ import { debounce } from "@/lib/debounce";
 import { safeSet, safeGet, safeRemove } from "@/lib/storageHelper";
 import { record } from "rrweb";
 import { ContentToInjectEvents, Events, InjectToContentEvents } from "@/lib/events";
+import { showToast } from "@/lib/toast";
+
+// Unique identifier for this tab's recording session (used to avoid cross‑tab auto‑resume conflicts)
+const recordingSessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
+
 
 async function main(ctx) {
   if (ctx.isInvalid) {
@@ -43,7 +48,7 @@ async function main(ctx) {
       // Save current events and response data to storage so they can be resumed after reload
       await persistPartialRecording();
       // Remember that a recording was in progress so we can auto‑resume
-      await safeSet('recordingInProgress', true);
+      await safeSet('recordingInProgress', recordingSessionId);
     }
   });
 
@@ -73,14 +78,15 @@ async function main(ctx) {
 const schedulePersist = debounce(() => persistPartialRecording().catch(console.error), 2000);
 // On script initialization, check if a recording was previously in progress.
   // If so, automatically resume it so the user doesn't lose their session.
-  (async () => {
-    const flag = await safeGet('recordingInProgress');
-    if (flag) {
-      // Remove flag now – startRecording will set it again on unload if needed.
-      await safeRemove('recordingInProgress');
-      await startRecording();
-    }
-  })();
+    (async () => {
+      const flag = await safeGet('recordingInProgress');
+      if (flag === recordingSessionId) {
+        // Remove flag now – startRecording will set it again on unload if needed.
+        await safeRemove('recordingInProgress');
+        await startRecording();
+        showToast('Recording resumed after page reload');
+      }
+    })();
 
   browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     if (message.action === Events.startRecording) {
