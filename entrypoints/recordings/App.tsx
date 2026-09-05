@@ -162,8 +162,7 @@ function App() {
           <div className="flex items-center justify-between">
             <div className="flex flex-row items-center gap-3">
               <img src="/icon/blackbox.png" className="h-10 dark:hidden" alt="Blackbox icon" />
-              <img src="/icon/blackbox-light
-              .png" className="h-10 hidden dark:block" alt="Blackbox icon" />
+              <img src="/icon/blackbox-light.png" className="h-10 hidden dark:block" alt="Blackbox icon" />
             <div>
               <CardTitle className="text-xl">Blackbox</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
