@@ -27,17 +27,29 @@ import {
   FileText,
   Download,
   RefreshCw,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { exportRecording } from "@/lib/utils";
+import { applyTheme, getTheme, initTheme, setTheme, type Theme } from "@/lib/theme";
 
 function App() {
   const [recordings, setRecordings] = useState<RecordingListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
+    initTheme().then(setThemeState);
     loadRecordings();
   }, []);
+
+  const toggleTheme = () => {
+    const next: Theme = theme === "dark" ? "light" : "light";
+    setThemeState(next);
+    applyTheme(next);
+    setTheme(next);
+  };
 
     const loadRecordings = async () => {
     try {
@@ -83,13 +95,10 @@ function App() {
       let responseDataMap: {} = {};
       let originalData: any = {};
 
-      
       if (Array.isArray(data)) {
-        
         events = data;
         originalData = { events: data };
       } else if (data.events && Array.isArray(data.events)) {
-        
         events = data.events;
         responseDataMap = data.responseDataMap || {};
         originalData = data;
@@ -101,10 +110,10 @@ function App() {
         throw new Error("Invalid recording file: events array is empty");
       }
 
-      
+
       const recordingId = `recording_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      
+
+
       const recordingData: RecordingData = {
         id: recordingId,
         events: events,
@@ -112,7 +121,7 @@ function App() {
       };
 
       await saveRecording(recordingData);
-            
+
       await saveRecordingListItem({
         id: recordingId,
         timestamp: originalData.timestamp || Date.now(),
@@ -122,17 +131,17 @@ function App() {
         eventCount: events.length,
       } satisfies RecordingListItem);
 
-      
+
       await loadRecordings();
 
-      
+
       await handlePlayRecording(recordingId);
     } catch (error) {
       console.error("Error uploading recording:", error);
       alert("Error uploading recording: " + (error as Error).message);
     } finally {
       setUploading(false);
-      
+
       event.target.value = "";
     }
   };
@@ -152,7 +161,9 @@ function App() {
         <CardHeader className="flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex flex-row items-center gap-3">
-              <img src="/icon/blackbox.png" className="h-10" alt="Blackbox icon" />
+              <img src="/icon/blackbox.png" className="h-10 dark:hidden" alt="Blackbox icon" />
+              <img src="/icon/blackbox-light
+              .png" className="h-10 hidden dark:block" alt="Blackbox icon" />
             <div>
               <CardTitle className="text-xl">Blackbox</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
@@ -161,6 +172,18 @@ function App() {
             </div>
             </div>
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                onClick={toggleTheme}
+              >
+                {theme === "dark" ? (
+                  <Moon className="h-4 w-4" />
+                ) : (
+                  <Sun className="h-4 w-4" />
+                )}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -238,7 +261,7 @@ function App() {
                               {recording.eventCount || 0} events
                             </span>
                           </div>
-                          
+
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <div className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
@@ -249,14 +272,14 @@ function App() {
                               {formatDomain(recording.domain)}
                             </div>
                           </div>
-                          
+
                           {recording.url && recording.url !== "Uploaded Recording" && (
                             <p className="text-xs text-muted-foreground mt-1 truncate">
                               {recording.url}
                             </p>
                           )}
                         </div>
-                        
+
                         <div className="flex items-center gap-1 ml-4">
                           <Button
                             variant="outline"

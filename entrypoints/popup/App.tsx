@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { saveRecording, saveRecordingListItem, cleanupOldRecordings, RecordingData, RecordingListItem } from "@/lib/db";
 import { Events } from "@/lib/events";
+import { initTheme } from "@/lib/theme";
 
 function App() {
 
@@ -19,6 +20,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    initTheme();
     checkRecordingStatus();
   },[]);
 
@@ -65,9 +67,9 @@ function App() {
             events,
             responseDataMap
           };
-          
+
           await saveRecording(recordingData);
-          
+
           await saveRecordingListItem({
             id: recordingId,
             timestamp: Date.now(),
@@ -76,7 +78,7 @@ function App() {
             domain: new URL(tab.url || "about:blank").hostname,
             eventCount: events.length
           } satisfies RecordingListItem);
-                    
+
           await browser.tabs.create({
             url: browser.runtime.getURL(`/replay.html?id=${recordingId}`),
           });
@@ -106,7 +108,8 @@ function App() {
     <div className="w-[340px] p-4 bg-background min-h-[340px]">
       <Card>
         <CardHeader className="flex flex-row items-center gap-3">
-          <img src="/icon/blackbox.png" className="h-10" alt="Blackbox icon" />
+          <img src="/icon/blackbox.png" className="h-10 dark:hidden" alt="Blackbox icon" />
+          <img src="/icon/blackbox-light.png" className="h-10 hidden dark:block" alt="Blackbox icon" />
           <div>
             <CardTitle className="text-lg">Blackbox</CardTitle>
             <CardDescription className="text-xs text-muted-foreground">

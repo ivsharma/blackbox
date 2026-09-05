@@ -7,9 +7,10 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui";
-import { Filter, Download, RefreshCw, ChevronsUpDown } from "lucide-react";
+import { Download } from "lucide-react";
 import { getRecording } from "@/lib/db";
 import { exportRecording } from "@/lib/utils";
+import { initTheme } from "@/lib/theme";
 
 function getRecordingIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -87,6 +88,7 @@ function App() {
   }, [responseData]);
 
   useEffect(() => {
+    initTheme();
     handlePlay();
   }, []);
 
@@ -132,18 +134,21 @@ function App() {
     <div className="h-screen flex flex-col">
       <header className="flex items-center justify-between px-6 py-4 border-b bg-background">
         <div className="flex flex-row items-center gap-3">
-          <img src="/icon/blackbox.png" className="h-8" alt="Blackbox icon" />
+          <img src="/icon/blackbox.png" className="h-8 dark:hidden" alt="Blackbox icon" />
+          <img src="/icon/blackbox-light.png" className="h-8 hidden dark:block" alt="Blackbox icon" />
           <h1 className="text-lg font-semibold">Blackbox</h1>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={() => exportRecording(getRecordingIdFromUrl() as string)}
-        >
-          <Download className="w-4 h-4" />
-          Export
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => exportRecording(getRecordingIdFromUrl() as string)}
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </Button>
+        </div>
       </header>
       <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
         <ResizablePanel defaultSize={70} minSize={40}>

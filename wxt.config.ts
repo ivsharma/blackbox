@@ -13,6 +13,7 @@ export default defineConfig({
   },
   manifest: {
     name: "Blackbox",
+    permissions: ["storage"],
     icons: {
       16: "icon/icon16.png",
       32: "icon/icon32.png",
